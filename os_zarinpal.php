@@ -3,7 +3,7 @@
  * @package     Joomla - > Site and Administrator payment info
  * @subpackage  com_eshop pay zarinpal plugins
  * @copyright   trangell team => https://trangell.com
- * @copyright   Copyright (C) 20016 Open Source Matters, Inc. All rights reserved.
+ * @copyright   Copyright (C) 2017 Open Source Matters, Inc. All rights reserved.
  * @license     GNU General Public License version 2 or later; see LICENSE.txt
  */
 defined('_JEXEC') or die();
@@ -19,6 +19,7 @@ class os_zarinpal extends os_payment
             'show_card_holder_name' => false
         );
         $this->setData('merchant_id',$params->get('merchant_id'));
+        $this->setData('zaringate',$params->get('zaringate'));
         
         parent::__construct($params, $config);
 	}
@@ -32,10 +33,10 @@ class os_zarinpal extends os_payment
 		$CallbackURL = JURI::root().'index.php?option=com_eshop&task=checkout.verifyPayment&payment_method=os_zarinpal&id='.$data['order_id']; 
 			
 		try {
-			 $client = new SoapClient('https://www.zarinpal.com/pg/services/WebGate/wsdl', ['encoding' => 'UTF-8']); 	
+			// $client = new SoapClient('https://www.zarinpal.com/pg/services/WebGate/wsdl', ['encoding' => 'UTF-8']);
 			//$client = new SoapClient('https://sandbox.zarinpal.com/pg/services/WebGate/wsdl', ['encoding' => 'UTF-8']); // for local
 
-			$result = $client->PaymentRequest(
+			/*$result = $client->PaymentRequest(
 				[
 				'MerchantID' => $this->data['merchant_id'],
 				'Amount' => $Amount,
@@ -44,18 +45,47 @@ class os_zarinpal extends os_payment
 				'Mobile' => $data['telephone'],
 				'CallbackURL' => $CallbackURL,
 				]
-			);
+			);*/
+			//////////////////////////////////////////////////////////////////////////////////////////////
+            $data = array("merchant_id" => $this->data['merchant_id'],
+                "amount" => $Amount,
+                "callback_url" => $CallbackURL,
+                "description" => $Description,
+                "metadata" => [ "email" => "0","mobile"=>"0"],
+            );
+            $jsonData = json_encode($data);
+            $ch = curl_init('https://api.zarinpal.com/pg/v4/payment/request.json');
+            curl_setopt($ch, CURLOPT_USERAGENT, 'ZarinPal Rest Api v1');
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+                'Content-Type: application/json',
+                'Content-Length: ' . strlen($jsonData)
+            ));
+
+            $result = curl_exec($ch);
+            $err = curl_error($ch);
+            $result = json_decode($result, true, JSON_PRETTY_PRINT);
+            curl_close($ch);
+            /// ///////////////////////////////////////////////////////////////////////////////////////////
 			
-			$resultStatus = abs($result->Status); 
-			if ($resultStatus == 100) {
-			
-			Header('Location: https://www.zarinpal.com/pg/StartPay/'.$result->Authority); 
-			//Header('Location: https://sandbox.zarinpal.com/pg/StartPay/'.$result->Authority); // for local/
+		//	$resultStatus = abs($result->Status);
+			if ($result['data']['code'] == 100) {
+				//if ($this->data['zaringate'] == 0){
+					//Header('Location: https://www.zarinpal.com/pg/StartPay/'.$result->Authority);
+				//}
+				//else {
+					Header('Location: https://www.zarinpal.com/pg/StartPay/'.$result['data']["authority"]);
+				//}
+				
+				//Header('Location: https://sandbox.zarinpal.com/pg/StartPay/'.$result->Authority); // for local/
 			} else {
-				echo'ERR: '.$resultStatus;
+				//echo'ERR: '.$resultStatus;
+                echo'Error Code: ' . $result['errors']['code'];
 			}
 		}
-		catch(\SoapFault $e) {
+		catch(Exception $e) {
 			$msg= $this->getGateMsg('error'); 
 			$app	= JFactory::getApplication();
 			$link = JRoute::_(JUri::root().'index.php?option=com_eshop&view=checkout&layout=cancel',false);
@@ -69,7 +99,7 @@ class os_zarinpal extends os_payment
 		$allData = EshopHelper::getOrder(intval($id)); //get all data
 		//$mobile = $allData['telephone'];
 		$jinput = JFactory::getApplication()->input;
-		$Authority = $jinput->get->get('Authority', '0', 'INT');
+		$Authority = $jinput->get->get('Authority', 'STRING');
 		$status = $jinput->get->get('Status', '', 'STRING');
 		
 		$this->logGatewayData(' OrderID: ' . $id . 'Authority:' . $Authority . 'Status:'.$status. 'OrderTime:'.time() );
@@ -78,32 +108,48 @@ class os_zarinpal extends os_payment
 
 			if ($status == 'OK') {
 				try {
-				    $client = new SoapClient('https://www.zarinpal.com/pg/services/WebGate/wsdl', ['encoding' => 'UTF-8']); 
+					//$client = new SoapClient('https://www.zarinpal.com/pg/services/WebGate/wsdl', ['encoding' => 'UTF-8']);
 					//$client = new SoapClient('https://sandbox.zarinpal.com/pg/services/WebGate/wsdl', ['encoding' => 'UTF-8']); // for local
 
-					$result = $client->PaymentVerification(
+					/*$result = $client->PaymentVerification(
 						[
 							'MerchantID' => $this->data['merchant_id'],
 							'Authority' => $Authority,
 							'Amount' => round($allData->total/10,4),
 						]
-					);
-					$resultStatus = abs($result->Status); 
-					if ($resultStatus == 100) {
-						$this->onPaymentSuccess($id, $result->RefID); 
-						$msg= $this->getGateMsg($resultStatus); 
+					);*/
+					///////////////////////////////////////////////////////////////////////////////////////
+                    $data = array("merchant_id" => $this->data['merchant_id'], "authority" => $Authority, "amount" => ound($allData->total/10,4));
+                    $jsonData = json_encode($data);
+                    $ch = curl_init('https://api.zarinpal.com/pg/v4/payment/verify.json');
+                    curl_setopt($ch, CURLOPT_USERAGENT, 'ZarinPal Rest Api v4');
+                    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+                    curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+                        'Content-Type: application/json',
+                        'Content-Length: ' . strlen($jsonData)
+                    ));
+                    $result = curl_exec($ch);
+                    curl_close($ch);
+                    $result = json_decode($result, true);
+                    /// ///////////////////////////////////////////////////////////////////////////////////
+					//$resultStatus = abs($result->Status);
+					if ($result['data']['code'] == 100) {
+						$this->onPaymentSuccess($id, $result['data']['ref_id']);
+						$msg= $this->getGateMsg($result['data']['code']);
 						$link = JRoute::_(JUri::root().'index.php?option=com_eshop&view=checkout&layout=complete',false);
-						$app->redirect($link, '<h2>'.$msg.'</h2>'.'<h3>'. $result->RefID .'شماره پیگری ' .'</h3>' , $msgType='Message'); 
+						$app->redirect($link, '<h2>'.$msg.'</h2>'.'<h3>'. $result['data']['ref_id'] .'شماره پیگری ' .'</h3>' , $msgType='Message');
 						return true;
 					} 
 					else {
-						$msg= $this->getGateMsg($resultStatus); 
+						$msg= $this->getGateMsg($result['data']['ref_id']);
 						$link = JRoute::_(JUri::root().'index.php?option=com_eshop&view=checkout&layout=cancel',false);
 						$app->redirect($link, '<h2>'.$msg.'</h2>', $msgType='Error'); 
 						return false;
 					}
 				}
-				catch(\SoapFault $e) {
+				catch(Exception $e) {
 					$msg= $this->getGateMsg('error'); 
 					$app	= JFactory::getApplication();
 					$link = JRoute::_(JUri::root().'index.php?option=com_eshop&view=checkout&layout=cancel',false);
