@@ -76,8 +76,18 @@ class os_zarinpal extends os_payment
 					//Header('Location: https://www.zarinpal.com/pg/StartPay/'.$result->Authority);
 				//}
 				//else {
-					Header('Location: https://www.zarinpal.com/pg/StartPay/'.$result['data']["authority"]);
+				//	Header('Location: https://www.zarinpal.com/pg/StartPay/'.$result['data']["authority"]);
 				//}
+                echo'<html><body>
+<script type="text/javascript" src="https://cdn.zarinpal.com/zarinak/v1/checkout.js"></script>
+<script type="text/javascript">
+window.onload = function () {
+Zarinak.setAuthority("' . $result['data']['authority'] . '");
+Zarinak.showQR();
+Zarinak.open();
+};
+</script>
+</body></html>';
 				
 				//Header('Location: https://sandbox.zarinpal.com/pg/StartPay/'.$result->Authority); // for local/
 			} else {
